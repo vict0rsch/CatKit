@@ -1,16 +1,17 @@
-from . import defaults
-from . import utils
-from . import symmetry
+import itertools
+
 import catkit
 import matplotlib.pyplot as plt
-import itertools
 import networkx as nx
 import numpy as np
 import scipy
-radii = defaults.get('radii')
+
+from . import defaults, symmetry, utils
+
+radii = defaults.get("radii")
 
 
-class AdsorptionSites():
+class AdsorptionSites:
     """Adsorption site object."""
 
     def __init__(self, slab, surface_atoms=None, tol=1e-5):
@@ -29,7 +30,7 @@ class AdsorptionSites():
         if surface_atoms is None:
             surface_atoms = slab.get_surface_atoms()
         if surface_atoms is None:
-            raise ValueError('Slab must contain surface atoms')
+            raise ValueError("Slab must contain surface atoms")
 
         extended_top = np.where(np.in1d(index, surface_atoms))[0]
 
@@ -40,14 +41,14 @@ class AdsorptionSites():
         self.index = index[extended_top]
 
         sites = self._get_higher_coordination_sites(coords[extended_top])
-        self.r2_topology = sites['top'][2]
+        self.r2_topology = sites["top"][2]
 
         # Put data into array format
-        selection = ['bridge', 'hollow', '4fold']
+        selection = ["bridge", "hollow", "4fold"]
         for i, k in enumerate(selection):
             coordinates, r1top, r2top = sites[k]
 
-            if k in ['hollow', '4fold']:
+            if k in ["hollow", "4fold"]:
                 r2top = [[] for _ in coordinates]
 
             self.connectivity += (np.ones(len(coordinates)) * (i + 2)).tolist()
@@ -57,15 +58,17 @@ class AdsorptionSites():
 
         self.coordinates = np.array(self.coordinates)
         self.connectivity = np.array(self.connectivity, dtype=int)
-        self.r1_topology = np.array(self.r1_topology)
-        self.r2_topology = np.array(self.r2_topology)
+        self.r1_topology = np.array(self.r1_topology, dtype=object)
+        self.r2_topology = np.array(self.r2_topology, dtype=object)
         self.frac_coords = np.dot(self.coordinates, np.linalg.pinv(slab.cell))
         self.slab = slab
 
-        screen = (self.frac_coords[:, 0] > 0 - self.tol) & \
-                 (self.frac_coords[:, 0] < 1 - self.tol) & \
-                 (self.frac_coords[:, 1] > 0 - self.tol) & \
-                 (self.frac_coords[:, 1] < 1 - self.tol)
+        screen = (
+            (self.frac_coords[:, 0] > 0 - self.tol)
+            & (self.frac_coords[:, 0] < 1 - self.tol)
+            & (self.frac_coords[:, 1] > 0 - self.tol)
+            & (self.frac_coords[:, 1] < 1 - self.tol)
+        )
 
         self.screen = screen
         self._symmetric_sites = None
@@ -99,9 +102,7 @@ class AdsorptionSites():
 
         return topology[sel]
 
-    def _get_higher_coordination_sites(self,
-                                       top_coordinates,
-                                       allow_obtuse=True):
+    def _get_higher_coordination_sites(self, top_coordinates, allow_obtuse=True):
         """Find all bridge and hollow sites (3-fold and 4-fold) given an
         input slab based Delaunay triangulation of surface atoms of a
         super-cell.
@@ -120,12 +121,13 @@ class AdsorptionSites():
             Dictionary sites containing positions, points, and neighbor lists.
         """
         sites = {
-            'top': [top_coordinates, [], [[] for _ in top_coordinates]],
-            'bridge': [[], [], []],
-            'hollow': [[], [], []],
-            '4fold': [[], [], []]}
+            "top": [top_coordinates, [], [[] for _ in top_coordinates]],
+            "bridge": [[], [], []],
+            "hollow": [[], [], []],
+            "4fold": [[], [], []],
+        }
 
-        dt = scipy.spatial.Delaunay(sites['top'][0][:, :2])
+        dt = scipy.spatial.Delaunay(sites["top"][0][:, :2])
         neighbors = dt.neighbors
         simplices = dt.simplices
 
@@ -134,13 +136,13 @@ class AdsorptionSites():
             edges = cir[:, 1:]
 
             # Inner angle of each triangle corner
-            vec = sites['top'][0][edges.T] - sites['top'][0][corners]
+            vec = sites["top"][0][edges.T] - sites["top"][0][corners]
             uvec = vec.T / np.linalg.norm(vec, axis=2).T
             angles = np.sum(uvec.T[0] * uvec.T[1], axis=1)
 
             # Angle types
             right = np.isclose(angles, 0)
-            obtuse = (angles < -self.tol)
+            obtuse = angles < -self.tol
 
             rh_corner = corners[right]
             edge_neighbors = neighbors[i]
@@ -150,7 +152,7 @@ class AdsorptionSites():
                 # are irrelevant boundaries.
                 continue
 
-            bridge = np.sum(sites['top'][0][edges], axis=1) / 2.0
+            bridge = np.sum(sites["top"][0][edges], axis=1) / 2.0
 
             # Looping through corners allows for elimination of
             # redundant points, identification of 4-fold hollows,
@@ -158,7 +160,7 @@ class AdsorptionSites():
             for j, c in enumerate(corners):
                 edge = sorted(edges[j])
 
-                if edge in sites['bridge'][1]:
+                if edge in sites["bridge"][1]:
                     continue
 
                 # Get the bridge neighbors (for adsorption vector)
@@ -168,46 +170,44 @@ class AdsorptionSites():
                 # Right angles potentially indicate 4-fold hollow
                 potential_hollow = edge + sorted([c, oc])
                 if c in rh_corner:
-
-                    if potential_hollow in sites['4fold'][1]:
+                    if potential_hollow in sites["4fold"][1]:
                         continue
 
                     # Assumption: If not 4-fold, this suggests
                     # no hollow OR bridge site is present.
-                    ovec = sites['top'][0][edge] - sites['top'][0][oc]
+                    ovec = sites["top"][0][edge] - sites["top"][0][oc]
                     ouvec = ovec / np.linalg.norm(ovec)
                     oangle = np.dot(*ouvec)
                     oright = np.isclose(oangle, 0)
                     if oright:
-                        sites['4fold'][0] += [bridge[j]]
-                        sites['4fold'][1] += [potential_hollow]
-                        sites['top'][2][c] += [oc]
+                        sites["4fold"][0] += [bridge[j]]
+                        sites["4fold"][1] += [potential_hollow]
+                        sites["top"][2][c] += [oc]
                 else:
-                    sites['bridge'][0] += [bridge[j]]
-                    sites['bridge'][1] += [edge]
-                    sites['bridge'][2] += [[c, oc]]
+                    sites["bridge"][0] += [bridge[j]]
+                    sites["bridge"][1] += [edge]
+                    sites["bridge"][2] += [[c, oc]]
 
-                sites['top'][2][edge[0]] += [edge[1]]
-                sites['top'][2][edge[1]] += [edge[0]]
+                sites["top"][2][edge[0]] += [edge[1]]
+                sites["top"][2][edge[1]] += [edge[0]]
 
             if not right.any() and not obtuse.any():
-                hollow = np.average(sites['top'][0][corners], axis=0)
-                sites['hollow'][0] += [hollow]
-                sites['hollow'][1] += [corners.tolist()]
+                hollow = np.average(sites["top"][0][corners], axis=0)
+                sites["hollow"][0] += [hollow]
+                sites["hollow"][1] += [corners.tolist()]
 
         # For collecting missed bridge neighbors
-        for s in sites['4fold'][1]:
-
+        for s in sites["4fold"][1]:
             edges = itertools.product(s[:2], s[2:])
             for edge in edges:
                 edge = sorted(edge)
-                i = sites['bridge'][1].index(edge)
-                n, m = sites['bridge'][1][i], sites['bridge'][2][i]
+                i = sites["bridge"][1].index(edge)
+                n, m = sites["bridge"][1][i], sites["bridge"][2][i]
                 nn = list(set(s) - set(n + m))
 
                 if len(nn) == 0:
                     continue
-                sites['bridge'][2][i] += [nn[0]]
+                sites["bridge"][2][i] += [nn[0]]
 
         return sites
 
@@ -334,8 +334,9 @@ class AdsorptionSites():
             All edges crossing ridge or vertices indexed by the expanded
             unit slab.
         """
-        vt = scipy.spatial.Voronoi(self.coordinates[:, :2],
-                                   qhull_options='Qbb Qc Qz C{}'.format(1e-2))
+        vt = scipy.spatial.Voronoi(
+            self.coordinates[:, :2], qhull_options="Qbb Qc Qz C{}".format(1e-2)
+        )
 
         select, lens = [], []
         for i, p in enumerate(vt.point_region):
@@ -363,7 +364,7 @@ class AdsorptionSites():
                 for n in nr:
                     edge = sorted((p, n))
 
-                    if n in uper[:i + 1] or edge in edges:
+                    if n in uper[: i + 1] or edge in edges:
                         continue
 
                     if (np.in1d(per[edge], per[uper[:i]]).any()) and periodic:
@@ -384,7 +385,7 @@ class AdsorptionSites():
 
         return edges
 
-    def ex_sites(self, index, select='inner', cutoff=0):
+    def ex_sites(self, index, select="inner", cutoff=0):
         """Get site indices inside or outside of a cutoff radii from a
         provided periodic site index. If two sites are provided, an
         option to return the mutually inclusive points is also available.
@@ -413,16 +414,16 @@ class AdsorptionSites():
         for i in index:
             diff = coords[:, None] - coords[per[i]]
             norm = np.linalg.norm(diff, axis=2)
-            if select == 'mutual' and len(index) == 2:
+            if select == "mutual" and len(index) == 2:
                 neighbors += [np.where(norm < cutoff)[0].tolist()]
             else:
                 neighbors += np.where(norm < cutoff)[0].tolist()
 
-        if select == 'inner':
+        if select == "inner":
             return per[neighbors]
-        elif select == 'outer':
+        elif select == "outer":
             return np.setdiff1d(per, per[neighbors])
-        elif select == 'mutual':
+        elif select == "mutual":
             return np.intersect1d(per[neighbors[0]], per[neighbors[1]])
 
     def plot(self, savefile=None):
@@ -435,10 +436,9 @@ class AdsorptionSites():
         ax = fig.add_axes([0, 0, 1, 1])
 
         ax.triplot(dt.points[:, 0], dt.points[:, 1], dt.simplices.copy())
-        ax.plot(dt.points[:, 0], dt.points[:, 1], 'o')
-        ax.plot(self.coordinates[:, 0][other], self.coordinates[:, 1][other],
-                'o')
-        ax.axis('off')
+        ax.plot(dt.points[:, 0], dt.points[:, 1], "o")
+        ax.plot(self.coordinates[:, 0][other], self.coordinates[:, 1][other], "o")
+        ax.axis("off")
 
         if savefile:
             plt.savefig(savefile, transparent=True)
@@ -453,13 +453,13 @@ class Builder(AdsorptionSites):
 
     def __repr__(self):
         formula = self.slab.get_chemical_formula()
-        string = 'Adsorption builder for {} slab.\n'.format(formula)
+        string = "Adsorption builder for {} slab.\n".format(formula)
         sym = len(self.get_symmetric_sites())
-        string += 'unique adsorption sites: {}\n'.format(sym)
+        string += "unique adsorption sites: {}\n".format(sym)
         con = self.get_connectivity()
-        string += 'site connectivity: {}\n'.format(con)
+        string += "site connectivity: {}\n".format(con)
         edges = self.get_adsorption_edges()
-        string += 'unique adsorption edges: {}'.format(len(edges))
+        string += "unique adsorption edges: {}".format(len(edges))
 
         return string
 
@@ -470,21 +470,14 @@ class Builder(AdsorptionSites):
             bond = np.where(ads.get_tags() == -1)[0][0]
 
             slab = self._single_adsorption(
-                ads,
-                slab=slab,
-                bond=bond,
-                site_index=indices[i],
-                symmetric=False)
+                ads, slab=slab, bond=bond, site_index=indices[i], symmetric=False
+            )
 
         return slab
 
     def add_adsorbate(
-            self,
-            adsorbate,
-            bonds=None,
-            index=0,
-            auto_construct=True,
-            **kwargs):
+        self, adsorbate, bonds=None, index=0, auto_construct=True, **kwargs
+    ):
         """Add and adsorbate to a slab. If the auto_constructor flag is False,
         the atoms object provided will be attached at the active site.
 
@@ -511,65 +504,71 @@ class Builder(AdsorptionSites):
             bonds = np.where(adsorbate.get_tags() == -1)[0]
 
         if len(bonds) == 0:
-            raise ValueError('Specify the index of atom to bond.')
+            raise ValueError("Specify the index of atom to bond.")
 
         elif len(bonds) == 1:
             if index is -1:
                 slab = []
                 for i, _ in enumerate(self.get_symmetric_sites()):
-                    slab += [self._single_adsorption(
-                        adsorbate,
-                        bond=bonds[0],
-                        site_index=i,
-                        auto_construct=auto_construct,
-                        **kwargs)]
+                    slab += [
+                        self._single_adsorption(
+                            adsorbate,
+                            bond=bonds[0],
+                            site_index=i,
+                            auto_construct=auto_construct,
+                            **kwargs
+                        )
+                    ]
             elif isinstance(index, (list, np.ndarray)):
                 slab = []
                 for i in index:
-                    slab += [self._single_adsorption(
-                        adsorbate,
-                        bond=bonds[0],
-                        site_index=i,
-                        auto_construct=auto_construct,
-                        **kwargs)]
+                    slab += [
+                        self._single_adsorption(
+                            adsorbate,
+                            bond=bonds[0],
+                            site_index=i,
+                            auto_construct=auto_construct,
+                            **kwargs
+                        )
+                    ]
             else:
                 slab = self._single_adsorption(
                     adsorbate,
                     bond=bonds[0],
                     site_index=index,
                     auto_construct=auto_construct,
-                    **kwargs)
+                    **kwargs
+                )
 
         elif len(bonds) == 2:
             if index == -1:
                 slab = []
                 edges = self.get_adsorption_edges()
                 for i, _ in enumerate(edges):
-                    slab += [self._double_adsorption(
-                        adsorbate,
-                        bonds=bonds,
-                        edge_index=i,
-                        **kwargs)]
+                    slab += [
+                        self._double_adsorption(
+                            adsorbate, bonds=bonds, edge_index=i, **kwargs
+                        )
+                    ]
             else:
                 slab = self._double_adsorption(
-                    adsorbate,
-                    bonds=bonds,
-                    edge_index=index,
-                    **kwargs)
+                    adsorbate, bonds=bonds, edge_index=index, **kwargs
+                )
 
         else:
-            raise ValueError('Only mono- and bidentate adsorption supported.')
+            raise ValueError("Only mono- and bidentate adsorption supported.")
 
         return slab
 
     def _single_adsorption(
-            self,
-            adsorbate,
-            bond,
-            slab=None,
-            site_index=0,
-            auto_construct=True,
-            symmetric=True):
+        self,
+        adsorbate,
+        bond,
+        slab=None,
+        site_index=0,
+        auto_construct=True,
+        symmetric=True,
+    ):
         """Bond and adsorbate by a single atom."""
         if slab is None:
             slab = self.slab.copy()
@@ -592,7 +591,8 @@ class Builder(AdsorptionSites):
         R = radii[numbers]
         base_position = utils.trilaterate(top_sites[u], r + R, vector)
 
-        branches = nx.bfs_successors(atoms.graph, bond)
+        # branches = nx.bfs_successors(atoms.graph, bond)
+        # ^(removed by Victor because it's likely a mistake as the var is unused)
         atoms.translate(-atoms.positions[bond])
 
         if auto_construct:
@@ -611,8 +611,7 @@ class Builder(AdsorptionSites):
 
         return slab
 
-    def _double_adsorption(self, adsorbate,
-                           bonds=None, edge_index=0):
+    def _double_adsorption(self, adsorbate, bonds=None, edge_index=0):
         """Bond and adsorbate by two adjacent atoms."""
         slab = self.slab.copy()
         atoms = adsorbate.copy()
@@ -656,16 +655,14 @@ class Builder(AdsorptionSites):
             uvec = [-uvec0, uvec1[0], uvec2[0]]
             self._branch_bidentate(atoms, uvec, branches0[0])
             for branch in branches0[1:]:
-                catkit.gen.molecules._branch_molecule(
-                    atoms, branch, adsorption=True)
+                catkit.gen.molecules._branch_molecule(atoms, branch, adsorption=True)
 
         branches1 = list(nx.bfs_successors(atoms.graph, bonds[1]))
         if len(branches1[0][1]) != 0:
             uvec = [uvec0, uvec1[0], uvec2[0]]
             self._branch_bidentate(atoms, uvec, branches1[0])
             for branch in branches1[1:]:
-                catkit.gen.molecules._branch_molecule(
-                    atoms, branch, adsorption=True)
+                catkit.gen.molecules._branch_molecule(atoms, branch, adsorption=True)
 
         n = len(slab)
         slab += atoms
@@ -688,33 +685,36 @@ class Builder(AdsorptionSites):
 
         # Single additional atom
         if len(nodes) == 1:
-            coord0 = c + \
-                d[0] * uvec[0] * np.cos(1 / 3. * np.pi) + \
-                d[0] * uvec[1] * np.sin(1 / 3. * np.pi)
+            coord0 = (
+                c
+                + d[0] * uvec[0] * np.cos(1 / 3.0 * np.pi)
+                + d[0] * uvec[1] * np.sin(1 / 3.0 * np.pi)
+            )
             atoms[nodes[0]].position = coord0
 
         # Two branch system
         elif len(nodes) == 2:
-            coord0 = c + \
-                d[0] * uvec[1] * np.cos(1 / 3. * np.pi) + \
-                0.866 * d[0] * uvec[0] * np.cos(1 / 3. * np.pi) + \
-                0.866 * d[0] * uvec[2] * np.sin(1 / 3. * np.pi)
+            coord0 = (
+                c
+                + d[0] * uvec[1] * np.cos(1 / 3.0 * np.pi)
+                + 0.866 * d[0] * uvec[0] * np.cos(1 / 3.0 * np.pi)
+                + 0.866 * d[0] * uvec[2] * np.sin(1 / 3.0 * np.pi)
+            )
             atoms[nodes[0]].position = coord0
 
-            coord1 = c + \
-                d[1] * uvec[1] * np.cos(1 / 3. * np.pi) + \
-                0.866 * d[1] * uvec[0] * np.cos(1 / 3. * np.pi) + \
-                0.866 * d[1] * -uvec[2] * np.sin(1 / 3. * np.pi)
+            coord1 = (
+                c
+                + d[1] * uvec[1] * np.cos(1 / 3.0 * np.pi)
+                + 0.866 * d[1] * uvec[0] * np.cos(1 / 3.0 * np.pi)
+                + 0.866 * d[1] * -uvec[2] * np.sin(1 / 3.0 * np.pi)
+            )
             atoms[nodes[1]].position = coord1
 
         else:
-            raise ValueError('Too many bonded atoms to position correctly.')
+            raise ValueError("Too many bonded atoms to position correctly.")
 
 
-def get_adsorption_sites(slab,
-                         surface_atoms=None,
-                         symmetry_reduced=True,
-                         tol=1e-5):
+def get_adsorption_sites(slab, surface_atoms=None, symmetry_reduced=True, tol=1e-5):
     """Get the adsorption sites of a slab as defined by surface
     symmetries of the surface atoms.
 
@@ -806,7 +806,7 @@ def _get_adsorption_sites(surface_positions, tol=1e-5):
 
         # Angle types
         right = np.isclose(angles, 0)
-        obtuse = (angles < -tol)
+        obtuse = angles < -tol
 
         rh_corner = corners[right]
         edge_neighbors = neighbors[i]
@@ -829,7 +829,6 @@ def _get_adsorption_sites(surface_positions, tol=1e-5):
             # Right angles potentially indicate 4-fold hollow
             potential_hollow = edge + sorted([c, oc])
             if c in rh_corner:
-
                 if potential_hollow in r1topology[3]:
                     continue
 
@@ -860,7 +859,6 @@ def _get_adsorption_sites(surface_positions, tol=1e-5):
 
     # For collecting missed bridge neighbors
     for s in r1topology[3]:
-
         edges = itertools.product(s[:2], s[2:])
         for edge in edges:
             edge = sorted(edge)
@@ -879,8 +877,7 @@ def _get_adsorption_sites(surface_positions, tol=1e-5):
     return positions, r1topology, r2topology
 
 
-def symmetry_equivalent_points(
-        fractional_coordinates, atoms, tol=1e-5):
+def symmetry_equivalent_points(fractional_coordinates, atoms, tol=1e-5):
     """Return the symmetrically equivalent points from a list of
     provided fractional coordinates.
 
