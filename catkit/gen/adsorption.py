@@ -73,6 +73,8 @@ class AdsorptionSites:
         self.screen = screen
         self._symmetric_sites = None
 
+        self._adsorption_vectors = [[None, None], [None, None]]
+        
     def get_connectivity(self, unique=True):
         """Return the number of connections associated with each site."""
         if unique:
@@ -301,6 +303,10 @@ class AdsorptionSites:
         vectors : ndarray (n, 3)
             Adsorption vectors for surface sites.
         """
+
+        if self._adsorption_vectors[unique][screen] is not None:
+            return self._adsorption_vectors[unique][screen]
+        
         top_coords = self.coordinates[self.connectivity == 1]
         if unique:
             sel = self.get_symmetric_sites(screen=screen)
@@ -315,6 +321,8 @@ class AdsorptionSites:
             plane_points = np.array(list(r1top[i]) + list(r2top[i]), dtype=int)
             vectors[i] = utils.plane_normal(top_coords[plane_points])
 
+        self._adsorption_vectors[unique][screen] = vectors
+            
         return vectors
 
     def get_adsorption_edges(self, symmetric=True, periodic=True):
