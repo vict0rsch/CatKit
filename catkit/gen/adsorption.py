@@ -73,6 +73,8 @@ class AdsorptionSites:
         self.screen = screen
         self._symmetric_sites = None
 
+        self._adsorption_vectors = [[None, None], [None, None]]
+        
     def get_connectivity(self, unique=True):
         """Return the number of connections associated with each site."""
         if unique:
@@ -196,18 +198,20 @@ class AdsorptionSites:
                 sites["hollow"][0] += [hollow]
                 sites["hollow"][1] += [corners.tolist()]
 
-        # For collecting missed bridge neighbors
-        for s in sites["4fold"][1]:
-            edges = itertools.product(s[:2], s[2:])
-            for edge in edges:
-                edge = sorted(edge)
-                i = sites["bridge"][1].index(edge)
-                n, m = sites["bridge"][1][i], sites["bridge"][2][i]
-                nn = list(set(s) - set(n + m))
-
-                if len(nn) == 0:
-                    continue
-                sites["bridge"][2][i] += [nn[0]]
+#        # For collecting missed bridge neighbors
+#        for s in sites["4fold"][1]:
+#
+#            edges = itertools.product(s[:2], s[2:])
+#            for edge in edges:
+#                edge = sorted(edge)
+#                i = sites["bridge"][1].index(edge)
+#                n, m = sites["bridge"][1][i], sites["bridge"][2][i]
+#                nn = list(set(s) - set(n + m))
+#
+#                if len(nn) == 0:
+#                    continue
+#                sites["bridge"][2][i] += [nn[0]]
+#
 
         return sites
 
@@ -301,6 +305,10 @@ class AdsorptionSites:
         vectors : ndarray (n, 3)
             Adsorption vectors for surface sites.
         """
+
+        if self._adsorption_vectors[unique][screen] is not None:
+            return self._adsorption_vectors[unique][screen]
+        
         top_coords = self.coordinates[self.connectivity == 1]
         if unique:
             sel = self.get_symmetric_sites(screen=screen)
@@ -315,6 +323,8 @@ class AdsorptionSites:
             plane_points = np.array(list(r1top[i]) + list(r2top[i]), dtype=int)
             vectors[i] = utils.plane_normal(top_coords[plane_points])
 
+        self._adsorption_vectors[unique][screen] = vectors
+            
         return vectors
 
     def get_adsorption_edges(self, symmetric=True, periodic=True):
@@ -507,7 +517,7 @@ class Builder(AdsorptionSites):
             raise ValueError("Specify the index of atom to bond.")
 
         elif len(bonds) == 1:
-            if index is -1:
+            if index == -1:
                 slab = []
                 for i, _ in enumerate(self.get_symmetric_sites()):
                     slab += [
